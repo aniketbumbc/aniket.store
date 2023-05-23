@@ -1,5 +1,4 @@
 
-
 const express = require('express');
 const server = require('http').createServer();
 const app = express();
@@ -11,6 +10,18 @@ app.get('/', function (req, res) {
 server.on('request', app);
 server.listen(3000, function () {
   console.log('server start on port 300');
+});
+
+process.on('SIGINT', () => {
+  console.log('sigint call');
+
+  wss.clients.forEach(function each(clt) {
+    clt.close();
+  });
+
+  server.close(() => {
+    shutDownDb();
+  });
 });
 
 /******** Wesocket ****** */
@@ -28,6 +39,10 @@ wss.on('connection', function connection(ws) {
     ws.send('welcome to my server');
   }
 
+  db.run(`INSERT INTO visitors (count,time)
+    VALUES(${numberClients},datetime('now'))
+  `);
+
   ws.on('close', function close() {
     wss.broadcast(`current visitor, ${numberClients}`);
     console.log('A client has disconnected');
@@ -39,4 +54,33 @@ wss.broadcast = function broadcast(data) {
     clients.send(data);
   });
 };
+
+/******** End Wesocket ****** */
+
+/******** Squlite database start ****** */
+
+const sqlite = require('sqlite3');
+const db = new sqlite.Database(':memory:');
+
+db.serialize(() => {
+  db.run(`
+    CREATE TABLE visitors (
+      count INTEGER,
+      time  TEXT
+    )
+  `);
+});
+
+function getCounts() {
+  db.each('SELECT * FROM visitors', (err, row) => {
+    console.log(row);
+  });
+}
+
+function shutDownDb() {
+  getCounts();
+  console.log('Shutting Down DB');
+  db.close();
+}
+
 
